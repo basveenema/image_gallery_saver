@@ -6,7 +6,6 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
     let errorMessage = "Failed to save, please check whether the permission is enabled"
     
     var result: FlutterResult?;
-	var assetCollection: PHAssetCollection?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
       let channel = FlutterMethodChannel(name: "image_gallery_saver", binaryMessenger: registrar.messenger())
@@ -26,7 +25,7 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
             let isReturnImagePath = arguments["isReturnImagePathOfIOS"] as? Bool
             else { return }
         let newImage = image.jpegData(compressionQuality: CGFloat(quality / 100))!
-		  saveImageAtFileUrl(image: UIImage(data: newImage) ?? image, albumName: albumName, isReturnImagePath: isReturnImagePath)
+		  saveImage(image: UIImage(data: newImage) ?? image, albumName: albumName, isReturnImagePath: isReturnImagePath)
       } else if (call.method == "saveFileToGallery") {
         guard let arguments = call.arguments as? [String: Any],
               let path = arguments["file"] as? String,
@@ -34,7 +33,7 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
               let _ = arguments["name"],
               let isReturnFilePath = arguments["isReturnPathOfIOS"] as? Bool else { return }
         if (isImageFile(filename: path)) {
-			saveImageAtFileUrl(url: path, albumName: albumName, isReturnImagePath: isReturnFilePath)
+			saveImage(url: path, albumName: albumName, isReturnImagePath: isReturnFilePath)
         } else {
             if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(path)) {
                 saveVideo(path, albumName: albumName, isReturnImagePath: isReturnFilePath)
@@ -50,14 +49,12 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
     func saveVideo(_ path: String, albumName: String?, isReturnImagePath: Bool) {
 		if let albumName = albumName {
 			if  let assetCollection = fetchAssetCollectionForAlbum(albumName: albumName) {
-				self.assetCollection = assetCollection
-				self.saveVideo(path: path)
-
+				self.saveVideoInAlbum(path: path, assetCollection: assetCollection)
 			} else {
 				if PHPhotoLibrary.authorizationStatus() == PHAuthorizationStatus.authorized {
 					self.createAlbum(albumName: albumName) { success in
 						if (success) {
-							self.saveVideo(path: path)
+							self.saveVideoInAlbum(path: path, assetCollection: self.fetchAssetCollectionForAlbum(albumName: albumName))
 						} else {
 							self.saveResult(isSuccess: false, error: self.errorMessage)
 						}
@@ -70,17 +67,17 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
             UISaveVideoAtPathToSavedPhotosAlbum(path, self, #selector(didFinishSavingVideo(videoPath:error:contextInfo:)), nil)
             return
 		} else {
-			saveVideo(path: path)
+			saveVideoInAlbum(path: path)
 		}
     }
 	
-	func saveVideo(path: String) {
+	func saveVideoInAlbum(path: String, assetCollection: PHAssetCollection? = nil) {
 		var videoIds: [String] = []
 		
 		PHPhotoLibrary.shared().performChanges( {
 			let req = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: URL.init(fileURLWithPath: path))
 			
-			if let assetCollection = self.assetCollection,  let albumChangeRequest = PHAssetCollectionChangeRequest(for: assetCollection), let request = req {
+			if let assetCollection = assetCollection,  let albumChangeRequest = PHAssetCollectionChangeRequest(for: assetCollection), let request = req {
 				let enumeration: NSArray = [request]
 				albumChangeRequest.addAssets(enumeration)
 			}
@@ -107,7 +104,7 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
 		})
 	}
     
-	func saveImage(url: String? = nil, image: UIImage? = nil) {
+	func saveImageInAlbum(url: String? = nil, image: UIImage? = nil,  assetCollection: PHAssetCollection? = nil) {
 		var imageIds: [String] = []
 		PHPhotoLibrary.shared().performChanges( {
 			
@@ -119,9 +116,8 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
 					request = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileUrl)
 				}
 			}
-
 			
-			if let assetCollection = self.assetCollection,  let albumChangeRequest = PHAssetCollectionChangeRequest(for: assetCollection), let request = request {
+			if let assetCollection = assetCollection,  let albumChangeRequest = PHAssetCollectionChangeRequest(for: assetCollection), let request = request {
 				let enumeration: NSArray = [request]
 				albumChangeRequest.addAssets(enumeration)
 			}
@@ -151,17 +147,15 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
 		})
     }
 	
-	func saveImageAtFileUrl(url: String? = nil, image: UIImage? = nil, albumName: String?, isReturnImagePath: Bool) {
+	func saveImage(url: String? = nil, image: UIImage? = nil, albumName: String?, isReturnImagePath: Bool) {
 		if let albumName = albumName {
 			if  let assetCollection = fetchAssetCollectionForAlbum(albumName: albumName) {
-				self.assetCollection = assetCollection
-				self.saveImage(url: url, image: image)
-
+				self.saveImageInAlbum(url: url, image: image, assetCollection: assetCollection)
 			} else {
 				if PHPhotoLibrary.authorizationStatus() == PHAuthorizationStatus.authorized {
 					self.createAlbum(albumName: albumName) { success in
 						if (success) {
-							self.saveImage(url: url, image: image)
+							self.saveImageInAlbum(url: url, image: image, assetCollection: self.fetchAssetCollectionForAlbum(albumName: albumName))
 						} else {
 							self.saveResult(isSuccess: false, error: self.errorMessage)
 						}
@@ -178,7 +172,7 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
 			}
             return
         } else {
-			saveImage(url: url, image: image)
+			saveImageInAlbum(url: url, image: image)
 		}
 		
     }
@@ -188,7 +182,6 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
 			PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
 		}) { success, error in
 			if success {
-				self.assetCollection = self.fetchAssetCollectionForAlbum(albumName: albumName)
 				completion(true)
 			} else {
 				self.saveResult(isSuccess: false, error: self.errorMessage)
