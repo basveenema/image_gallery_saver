@@ -20,18 +20,18 @@ public class SwiftImageGallerySaverPlugin: NSObject, FlutterPlugin {
         guard let imageData = (arguments["imageBytes"] as? FlutterStandardTypedData)?.data,
             let image = UIImage(data: imageData),
             let quality = arguments["quality"] as? Int,
-			let albumName = arguments["albumName"] as? String,
             let _ = arguments["name"],
             let isReturnImagePath = arguments["isReturnImagePathOfIOS"] as? Bool
             else { return }
+		let albumName = arguments["albumName"] as? String
         let newImage = image.jpegData(compressionQuality: CGFloat(quality / 100))!
 		  saveImage(image: UIImage(data: newImage) ?? image, albumName: albumName, isReturnImagePath: isReturnImagePath)
       } else if (call.method == "saveFileToGallery") {
         guard let arguments = call.arguments as? [String: Any],
               let path = arguments["file"] as? String,
-			  let albumName = arguments["albumName"] as? String,
               let _ = arguments["name"],
               let isReturnFilePath = arguments["isReturnPathOfIOS"] as? Bool else { return }
+		let albumName = arguments["albumName"] as? String
         if (isImageFile(filename: path)) {
 			saveImage(url: path, albumName: albumName, isReturnImagePath: isReturnFilePath)
         } else {
