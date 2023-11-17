@@ -26,6 +26,10 @@ import android.text.TextUtils
 import android.webkit.MimeTypeMap
 import java.io.OutputStream
 
+
+enum class MediaType {
+    VIDEO, IMAGE, DOCUMENT
+}
 class ImageGallerySaverPlugin : FlutterPlugin, MethodCallHandler {
     private lateinit var methodChannel: MethodChannel
     private var applicationContext: Context? = null
@@ -74,23 +78,32 @@ class ImageGallerySaverPlugin : FlutterPlugin, MethodCallHandler {
     private fun generateUri(extension: String = "", name: String? = null, albumName: String? = null): Uri? {
         var fileName = name ?: System.currentTimeMillis().toString()
         val mimeType = getMIMEType(extension)
-        val isVideo = mimeType?.startsWith("video")==true
+        val mediaType = if (mimeType?.startsWith("video")==true) {
+            MediaType.VIDEO
+        } else if (mimeType?.startsWith("image")==true) {
+            MediaType.IMAGE
+        } else {
+            MediaType.DOCUMENT
+        }
+
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // >= android 10
             val uri = when {
-                isVideo -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                else -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                mediaType == MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                mediaType == MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                else -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
             }
 
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(
-                    MediaStore.MediaColumns.RELATIVE_PATH, getSaveLocation(isVideo, albumName)
+                    MediaStore.MediaColumns.RELATIVE_PATH, getSaveLocation(mediaType, albumName)
                 )
                 if (!TextUtils.isEmpty(mimeType)) {
-                    put(when {isVideo -> MediaStore.Video.Media.MIME_TYPE
-                        else -> MediaStore.Images.Media.MIME_TYPE
+                    put(when {mediaType == MediaType.VIDEO -> MediaStore.Video.Media.MIME_TYPE
+                        mediaType == MediaType.IMAGE -> MediaStore.Images.Media.MIME_TYPE
+                        else -> MediaStore.Downloads.MIME_TYPE
                     }, mimeType)
                 }
             }
@@ -100,7 +113,7 @@ class ImageGallerySaverPlugin : FlutterPlugin, MethodCallHandler {
         } else {
             // < android 10
             val storePath =
-                Environment.getExternalStoragePublicDirectory(getSaveLocation(isVideo, albumName)).absolutePath
+                Environment.getExternalStoragePublicDirectory(getSaveLocation(mediaType, albumName)).absolutePath
             val appDir = File(storePath).apply {
                 if (!exists()) {
                     mkdir()
@@ -113,14 +126,15 @@ class ImageGallerySaverPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
-    private fun getSaveLocation(isVideo: Boolean, albumName: String? = null): String {
+    private fun getSaveLocation(mediaType: MediaType, albumName: String? = null): String {
         val album = when {
             albumName != null -> File.separator + albumName
             else -> ""
         }
         return when {
-            isVideo -> Environment.DIRECTORY_MOVIES + album
-            else -> Environment.DIRECTORY_PICTURES + album
+            mediaType == MediaType.VIDEO -> Environment.DIRECTORY_MOVIES + album
+            mediaType == MediaType.IMAGE -> Environment.DIRECTORY_PICTURES + album
+            else -> Environment.DIRECTORY_DOWNLOADS + album
         }
     }
 
